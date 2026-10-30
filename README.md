@@ -48,11 +48,13 @@
 
 ## 安装
 
-本仓库以 **skill** 形式组织，位于 `.trae/skills/`：
+本仓库**根目录就是技能目录本身**：
 
 ```
-.trae/skills/literature-search-to-library/
+literature-search-to-library/
 ├── SKILL.md              # 入口：判断意图、按需加载分册、硬规则
+├── README.md
+├── LICENSE
 ├── references/
 │   ├── search.md         # 检索 → 报告 → 检查点 → 简报（关键词路径）
 │   └── download.md       # 七家出版社通道 + 硬约束（下载路径）
@@ -61,8 +63,8 @@
 
 两种装法，任选其一：
 
-1. **项目级**：把 `.trae/skills/` 复制到你自己的项目里，`run_batch.ps1` 用相对路径调用即可。下文所有命令都按这种装法、在仓库根目录执行。
-2. **用户级（全局）**：把技能目录复制到 `%USERPROFILE%\.trae-cn\skills\`（或 WorkBuddy 的 `%USERPROFILE%\.workbuddy\skills\`），之后任意项目可用；此时替换掉命令里的 `.trae\skills\literature-search-to-library` 前缀。
+1. **项目级**：把本目录放到项目的 `.trae/skills/literature-search-to-library/` 下；下文命令按这个位置书写，在项目根目录执行。
+2. **用户级（全局）**：把本目录复制到 `%USERPROFILE%\.trae-cn\skills\literature-search-to-library\`（或 WorkBuddy 的 `%USERPROFILE%\.workbuddy\skills\literature-search-to-library\`），之后任意项目可用；此时把命令里的 `.trae\skills\literature-search-to-library` 换成 `~\.trae-cn\skills\literature-search-to-library`。
 
 若用发布页的 zip 包：**解压后的根目录本身就是技能目录**（`SKILL.md`、`README.md`、`LICENSE`、`references/`、`scripts/` 直接平铺），把这个目录整个拷进 `skills\` 即可，不要再套一层同名文件夹。
 
