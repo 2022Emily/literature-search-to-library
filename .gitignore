@@ -1,0 +1,16 @@
+# 运行期产物
+__pycache__/
+*.pyc
+*.tmp
+
+# 下载与检索的中间文件（技能只发布脚本与文档，不发布任何文献数据）
+*.pdf
+*.unverified.pdf
+_*.json
+*_enriched.json
+pool*.json
+*_selected.json
+meta.json
+_stage/
+docs/node_modules/
+node_modules/
