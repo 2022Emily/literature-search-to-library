@@ -2,7 +2,7 @@
 name: literature-search-to-library
 description: 学术文献从关键词检索到 PDF 入库的完整流程：OpenAlex 检索与排序、元数据补全、分析报告（含人工检查点）、按出版社通道下载 PDF 并三重校验；也支持只给 DOI 直接入库。Use when the user asks to search a topic by keywords and build a local PDF library, or to download full-text PDFs (Elsevier, AAAS, ACS, Wiley, Springer/Nature, RSC, MDPI) from DOIs.
 metadata:
-  version: "2.0.0"
+  version: "2.0.1"
   status: active
 ---
 

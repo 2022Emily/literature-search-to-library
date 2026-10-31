@@ -51,6 +51,9 @@ for (const x of pool) {
 
 const absOf = (x) => (x.absText || x.abstractCr || x.abstractS2 || x.abstract || '').trim();
 const absSrcOf = (x) => x.absSrc || (absOf(x) ? 'openalex' : '');
+// 内部标识（openalex / crossref / s2）只在数据里用；写进报告时一律换成正式名称
+const ABS_LABEL = { openalex: 'OpenAlex', crossref: 'Crossref', s2: 'Semantic Scholar' };
+const absLabelOf = (x) => ABS_LABEL[absSrcOf(x)] || '';
 const pct = (a, b) => (b ? `${a}/${b}（${Math.round((a / b) * 100)}%）` : '—');
 const median = (ns) => {
   if (!ns.length) return 0;
@@ -312,7 +315,7 @@ md.push(`- **最终候选：${N} 条**；年份 ${Object.entries(years).map(([y,
 md.push(`- 期刊档：${Object.entries(tiers).map(([k, c]) => `${k} ${c}`).join(' / ')}；IF≈ 中位 ${stats.pool.ifMedian ?? '—'}、最高 ${stats.pool.ifMax ?? '—'}`);
 md.push(`- 被引：有引用 ${cited.length} 条，中位 ${stats.pool.cited.median}、最高 ${stats.pool.cited.max}；被引年化中位 ${stats.pool.cited.annualMedian}、最高 ${stats.pool.cited.annualMax}`);
 md.push(`- 开放获取：${pct(pool.filter((x) => x.oa).length, N)}；获取性预判 直取 ${access.direct || 0} / 浏览器 ${access.browser || 0} / 未知 ${access.unknown || 0}`);
-md.push(`- 摘要覆盖：${Object.entries(absBy).map(([k, c]) => `${k} ${c}`).join(' / ')}；**缺失 ${noAbs.length} 条** ${noAbs.length ? '（详见第四节）' : ''}`);
+md.push(`- 摘要覆盖：${Object.entries(absBy).map(([k, c]) => `${ABS_LABEL[k] || k} ${c}`).join(' / ')}；**缺失 ${noAbs.length} 条** ${noAbs.length ? '（详见第四节）' : ''}`);
 md.push(`- 主要出版方：${Object.entries(pubs).sort((a, b) => b[1] - a[1]).slice(0, 6).map(([k, c]) => `${k} ${c}`).join(' / ')}`);
 md.push(`- 高频主题词：${globalTerms.slice(0, 12).join('、')}`);
 md.push('');
@@ -391,7 +394,7 @@ cardItems.forEach((x, i) => {
   md.push(`### ${i + 1}. ${cell(x.title, 200)}${starDoiSet.has(x.doi) ? ' ★' : ''}`);
   md.push('');
   md.push(`- ${x.journal || '—'}（${x.tierName}，IF≈ ${x.if2y ?? '—'}）｜${yearCell(x)}｜被引 ${x.cited}（年化 ${x.citedAnnual}）`);
-  md.push(`- DOI：\`${x.doi}\`｜摘要来源：${absSrcOf(x)}`);
+  md.push(`- DOI：\`${x.doi}\`｜摘要来源：${absLabelOf(x)}`);
   md.push(`- 💡 核心贡献：${T}`);
   md.push(`- 🔬 方法：${T}`);
   md.push(`- 📊 主要结果：${T}`);
