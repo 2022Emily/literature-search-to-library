@@ -42,7 +42,7 @@ Glob: **/scripts/search_multi.mjs   →  $S 取其所在目录
 2. `node "$S\enrich_meta.mjs"` 补 `publisher` / `host` / `pii` / 摘要 / 印刷期
 3. `node "$S\analyze_pool.mjs"` 出 `_analysis_draft.md`，**由你把 draft 补成 `_analysis.md`**
 4. `python "$S\md2docx.py"` 导出同名 `_analysis.docx`（缺 `python-docx` 只提示、不阻塞）
-5. **检查点**：出简报，同时给 Word 与 Markdown 两个链接，问「下载哪些 / 存到哪里」
+5. **检查点**：出简报，同时给 Word 与 Markdown 两个链接（一律 `file:///` 绝对路径），问「下载哪些 / 存到哪里」
 6. 按用户选择跑 `run_batch.ps1`，再校验、写 `文献清单.md`
 
 报告骨架、卡片格式、检查点三态兜底、简报模板，全部在 `references/search.md`。
@@ -55,7 +55,7 @@ Glob: **/scripts/search_multi.mjs   →  $S 取其所在目录
 - 「零被引·高影响刊」一节不能删：同年新刊场景下主排序键必然把高影响新文献压到末尾
 - `IF≈` 不得写成「影响因子」，口径是 OpenAlex 近两年篇均被引
 - 报告正文不得出现「速读卡 / 噪声 / 池子 / 候选池分析 / 子体系全景」
-- 报告同时交 Word 与 Markdown 两份，简报里两个链接都要给
+- 报告同时交 Word 与 Markdown 两份，简报里两个链接都要给；链接一律写成 `file:///` + 绝对路径（正斜杠、带盘符，如 `file:///e:/项目/dist/_analysis.docx`），不要用 `computer://`，也不要写省略盘符的相对路径
 - 每条评述必须写局限；结尾必须回答「若只选 5 篇」
 - 下载硬约束：**启动 Edge → 等端口 → 跑脚本必须在同一条 Shell 命令里**；Wiley 单篇间隔 ≥10 秒，Elsevier / AAAS / ACS / Springer / RSC / MDPI ≥4 秒
 - 遇 Cloudflare / 验证码只提示并轮询等待，不自动破解；只处理有机构授权的文献
