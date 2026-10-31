@@ -136,7 +136,7 @@ async function routeOne(it) {
     const pii = it.pii || (await piiOf(it.doi));
     if (pii) p.pii = pii;
   }
-  console.log(`TODO ${it.doi}  → ${kind}${p.pii ? ' pii=' + p.pii : ''}  (${oa})`);
+  console.log(`TODO ${it.doi}  → ${kind}${p.pii ? ' pii=' + p.pii : ''}  (${oa})${kind === 'unknown' ? '  未适配出版社，交给通用兜底' : ''}`);
   return {
     report: { doi: it.doi, route: kind, status: 'pending-browser', reason: oa },
     pending: p,

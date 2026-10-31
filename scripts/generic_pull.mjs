@@ -49,8 +49,10 @@ for (const it of ITEMS) {
       continue;
     }
 
-    // 找 PDF 入口
+    // 找 PDF 入口：优先页面上的下载链接，其次 meta[name="citation_pdf_url"]
+    // （后者是未点名适配的出版社最可靠的入口，见 dispatch.mjs 的 unknown 兜底）
     let href = null;
+    let pageUrl = null;
     let verifySecs = 0;
     for (let i = 0; i < 40; i++) {
       await sleep(2000);
@@ -61,20 +63,22 @@ for (const it of ITEMS) {
         let pick=null;
         for(const p of pats){const els=[...document.querySelectorAll(p)].filter(a=>!a.closest('nav,footer'));
           const cur=els.find(a=>/accessbar-utility|pdf-link|article-pdfLink/.test(a.className))||els[0]; if(cur){pick=cur;break}}
+        const meta=document.querySelector('meta[name="citation_pdf_url"]');
         return JSON.stringify({url:location.href,ts,href:pick?pick.getAttribute('href'):null,
+          meta:meta?meta.content:null,
           alt:location.pathname.match(/^\\/\\d+\\.\\d+\\//)?location.origin+location.pathname+'/pdf':null});
       })()`).catch(() => null);
       if (!raw) continue;
       const st = JSON.parse(raw);
       if (st.ts) { verifySecs += 2; if (i % 10 === 0) console.log(`⏸  ${it.doi} 需要人工验证…`); continue; }
-      href = st.href || st.alt;
-      if (href) break;
+      href = st.href || st.meta || st.alt;
+      if (href) { pageUrl = st.url; break; }
     }
     if (!href) {
       if (verifySecs >= 10) throw new Error(`人机验证未通过（已等 ${verifySecs} 秒，请在 Edge 窗口勾选后重跑）`);
       throw new Error('未找到 PDF 入口');
     }
-    const full = href.startsWith('http') ? href : absUrl(it, href);
+    const full = href.startsWith('http') ? href : absUrl(it, href, pageUrl);
     console.log(`→ ${it.doi} 入口 ${full.slice(0, 100)}`);
 
     await cdp.send('Page.navigate', { url: full }, sessionId);
@@ -84,10 +88,13 @@ for (const it of ITEMS) {
       await sleep(2000);
       const u = await cdp.ev(sessionId, 'location.href').catch(() => null);
       if (!u) continue;
+      // 落地页本身是 PDF 就取 location.href；否则（未适配出版社的 meta 地址、
+      // 或导航被插件接管留在文章页）只要与当前页同源，就直接页内取目标地址
       const isPdfPage = /sciencedirectassets\.com|\.pdf(\?|$)/i.test(u) || /\/epdf\//i.test(u);
-      if (!isPdfPage) continue;
+      const expr = isPdfPage ? 'location.href' : originOf(full) === originOf(u) ? JSON.stringify(full) : null;
+      if (!expr) continue;
       try {
-        const r = await pull(sessionId, dst);
+        const r = await pull(sessionId, dst, expr);
         markDone(OUT, it, dst, { pages: r.pages });
         console.log(`OK   ${it.doi}  ${(r.size / 1048576).toFixed(1)}MB  pages≈${r.pages}`);
         ok = true;
@@ -110,9 +117,22 @@ for (const it of ITEMS) {
 await cdp.close();
 if (fail) process.exitCode = 1;
 
-function absUrl(it, href) {
+function absUrl(it, href, base) {
   if (it.kind === 'elsevier') return 'https://www.sciencedirect.com' + href;
   if (it.kind === 'acs') return 'https://pubs.acs.org' + href;
   if (it.kind === 'mdpi') return 'https://www.mdpi.com' + href;
-  return href;
+  // 其余出版社按文章页实际地址解析相对路径（如 nature.com 的 /articles/xxx.pdf）
+  try {
+    return new URL(href, base).href;
+  } catch {
+    return href;
+  }
+}
+
+function originOf(url) {
+  try {
+    return new URL(url).origin;
+  } catch {
+    return '';
+  }
 }

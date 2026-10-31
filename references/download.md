@@ -93,7 +93,7 @@ node scripts/enrich_meta.mjs <候选池.json> <候选池_enriched.json> [--meta 
 
 实测 40 条候选：publisher 与 host 均 40/40 命中；host 分布为 api.elsevier.com 13、pubs.acs.org 8、advanced.onlinelibrary.wiley.com 7、onlinelibrary.wiley.com 4、link.springer.com 3、nature.com 2、mdpi.com 2、rsc.org 1。跳过 `api.*` 之后，那 13 条 Elsevier 的 host 会变成空，出版社判定改由 `publisher` 承担。
 
-`oa_route.mjs` 只用这两个字段判定出版社（缺失记 `unknown`，交给 `dispatch.mjs` 打 WARN 转人工），并把 `host` 透传进 `_browser_pending.json`；`wiley_cookie.mjs` 按该字段选域名，加载后还会用 `location.href` 的真实地址取字节，避免裸域名 302 到 `advanced.*` 时拿不到正文。
+`oa_route.mjs` 只用这两个字段判定出版社（缺失记 `unknown`，`dispatch.mjs` 会交给通用兜底试一次），并把 `host` 透传进 `_browser_pending.json`；`wiley_cookie.mjs` 按该字段选域名，加载后还会用 `location.href` 的真实地址取字节，避免裸域名 302 到 `advanced.*` 时拿不到正文。
 
 **不要用 DOI 前缀做兜底**：前缀只标识注册方，`10.1002` 里既有 `advanced.*` 也有裸域名，`10.1007` 还混着清华大学出版社的期刊。实测按前缀路由会把 Advanced 系列的正常文献派错通道。
 
@@ -109,7 +109,7 @@ node scripts/dispatch.mjs 9223 <输出目录> [--dry] [--retry-failed]
 - 执行顺序 elsevier → aaas → acs → wiley → springer → rsc → mdpi，避免 Elsevier 的 assets 页被顶掉
 - `--dry` 只打印分派结果，不实际下载，建议先跑一次
 - `--retry-failed` 改读 `<输出目录>/_failed.json`，只重跑上次失败的条目（会自动从 `_items_enriched.json` 补回 host / pii）
-- `kind` 为 `unknown` 时打印 WARN 并跳过，需人工指定通道；收尾会报告未处理篇数
+- `kind` 为 `unknown` 时不再跳过：交给 `generic_pull.mjs` 的**通用兜底**，读文章页 `meta[name="citation_pdf_url"]`，同源 fetch 取字节（2.4 MB / 17 页的 Nature Communications 实测通过）。取不到才记进 `_failed.json`，不再需要人工指定通道
 - 有通道失败时退出码为 1，失败条目统一落 `_failed.json`（`{doi, kind, script, file, reason, attempts, first, last}`），成功则自动清除该条
 
 ## 失败清单与断点续跑
@@ -153,6 +153,7 @@ node scripts/<脚本> 9223 <输出目录> <items.json>
 | MDPI | 全 OA | 路径为 `/{issn}/{vol}/{issue}/{article}`，无法由 DOI 拼出 | 见下方专用流程，脚本 `scripts/mdpi_pull.mjs` |
 | RSC / pubs.rsc.org | 机构 IP（页面显示所属机构名） | 文章页 `meta[name="citation_pdf_url"]` | 见下方专用流程，脚本 `scripts/rsc_pull.mjs` |
 | 纯 OA / bronze | 无需授权 | OpenAlex `pdf_url`（可选 Unpaywall） | Node 直链，成功率≈100%，由 `oa_route.mjs` 自动处理，优先走 |
+| 其他（未点名适配：IEEE、AIP、IOP、T&F、SAGE、CUP/OUP、PNAS…） | 视出版社而定 | 文章页 `meta[name="citation_pdf_url"]` | `generic_pull.mjs` 通用兜底：同源 fetch，非 `%PDF-` 即记失败 |
 
 ## AAAS 专用流程
 
@@ -325,7 +326,7 @@ node scripts\upload_ima.mjs <输出目录> --kb <知识库ID> [--folder <文件�
 
 ## 已知局限
 
-- **必须先在检索阶段补 `publisher` / `host`**（`enrich_meta.mjs`）。缺这两项会落 `unknown`，需人工指定通道；已移除 DOI 前缀兜底，因为它无法区分同一前缀下的不同托管域名。
+- **仍建议先在检索阶段补 `publisher` / `host`**（`enrich_meta.mjs`）。缺这两项会落 `unknown`，此时才走通用兜底；点名通道（pii、cookie 复用）比兜底更稳。已移除 DOI 前缀兜底，因为它无法区分同一前缀下的不同托管域名。
 - 10.1007 取 `publisher` 后可区分 Springer 与清华大学出版社（Nano-Micro Letters）。后者不归 Springer 托管，会落 `springer` 通道并被判为无全文访问权限，需人工指定入口。
 - RSC 的订阅是**按刊**的：本机构对 *J. Mater. Chem. A*、*Mater. Adv.*、*RSC Adv.* 有权限，但 *Sustainable Energy & Fuels* 实测被退回文章页。同一批清单里出现 RSC 的 FAIL 时，先怀疑该刊未订阅，再查脚本。
 - MDPI 虽是全 OA，`oa_route` 偶尔能直取（OpenAlex 的 `pdf_url` 指向 `mdpi-res.com` CDN 时），多数情况指向 `www.mdpi.com/.../pdf` 会被 Cloudflare 拦而落到 pending。因此 MDPI 走浏览器通道属正常，不必当成路由失败。

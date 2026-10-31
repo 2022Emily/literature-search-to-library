@@ -2,6 +2,7 @@
 // 用法：node dispatch.mjs <端口> <输出目录> [--dry] [--retry-failed]
 //   --dry           只打印分派结果
 //   --retry-failed  改读 _failed.json，只重跑上次失败的条目
+// kind=unknown 交给 generic_pull 兜底（读 citation_pdf_url），取不到再来记一次失败。
 // 依赖同目录下的 aaas_pull / sd_pull / wiley_cookie / generic_pull / springer_pull / rsc_pull / mdpi_pull。
 import fs from 'node:fs';
 import path from 'node:path';
@@ -24,9 +25,11 @@ const MAP = {
   mdpi: 'mdpi_pull.mjs',
   springer: 'springer_pull.mjs',
   rsc: 'rsc_pull.mjs',
+  // 未点名适配的出版社走通用兜底：读 citation_pdf_url，取不到就照旧记失败
+  unknown: 'generic_pull.mjs',
 };
-// 有依赖关系的顺序：先 Elsevier（会复用已开着的 assets 页），其余互不影响
-const ORDER = ['elsevier', 'aaas', 'acs', 'wiley', 'springer', 'rsc', 'mdpi'];
+// 有依赖关系的顺序：先 Elsevier（会复用已开着的 assets 页），其余互不影响；兜底放最后
+const ORDER = ['elsevier', 'aaas', 'acs', 'wiley', 'springer', 'rsc', 'mdpi', 'unknown'];
 
 let items;
 if (RETRY) {
@@ -55,8 +58,12 @@ if (RETRY) {
 const groups = {};
 const unsupported = [];
 for (const it of items) {
-  if (MAP[it.kind]) (groups[it.kind] ||= []).push(it);
+  const kind = it.kind || 'unknown';
+  if (MAP[kind]) (groups[kind] ||= []).push(it);
   else unsupported.push(it);
+}
+for (const it of groups.unknown || []) {
+  console.log(`WARN ${it.doi}  kind=unknown，走通用兜底（读 citation_pdf_url）`);
 }
 for (const it of unsupported) {
   console.log(`WARN ${it.doi}  kind=${it.kind} 暂无对应脚本，需手工处理`);

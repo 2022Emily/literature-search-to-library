@@ -51,7 +51,7 @@
 
 输入是**已有的 DOI 或文章页 URL 清单**。要从关键词开始找文献，走同一个技能的检索路径（见 [关键词 → PDF](#关键词--pdf-闭环)）。
 
-暂未覆盖：IEEE、AIP、IOP、Taylor & Francis、SAGE、Cambridge / Oxford、PNAS；附属材料（SI）也未覆盖。这类条目会落 `kind=unknown`，需要手工指定入口。
+未点名适配的出版社（IEEE、AIP、IOP、Taylor & Francis、SAGE、Cambridge / Oxford、PNAS 等）会落 `kind=unknown`，由 `generic_pull.mjs` 的**通用兜底**读文章页的 `citation_pdf_url` 试取一次；取不到才记进 `_failed.json`。附属材料（SI）未覆盖。
 
 ## 环境要求
 
@@ -133,7 +133,7 @@ python "$S\verify_pdf.py" <Out> --meta <Out>\meta.json
 node .trae\skills\literature-search-to-library\scripts\search_multi.mjs pool.json `
   --query "perovskite solar cell" --from 2026 --to 2026 --email you@example.com
 
-# 2. 补元数据：publisher / host / pii + 印刷期日期 + 三源摘要（下载阶段靠 host 路由，缺了会落 unknown）
+# 2. 补元数据：publisher / host / pii + 印刷期日期 + 三源摘要（下载阶段靠 host 路由，缺了落 unknown 走通用兜底）
 node .trae\skills\literature-search-to-library\scripts\enrich_meta.mjs pool.json pool_enriched.json
 
 # 3. 分析：生成 _analysis_draft.md，由 agent 按 SKILL.md 里的定稿骨架补成 _analysis.md（检查点的前置产物）
@@ -207,7 +207,7 @@ node .trae\skills\literature-search-to-library\scripts\upload_ima.mjs D:\lib\my-
 | `人机验证未通过（已等 N 秒…）` | Cloudflare Turnstile 没通过 | 在 Edge 窗口勾选，再 `-Retry` |
 | `无全文访问权限（页面未出现 FULL ACCESS）` | 本机构无该刊订阅 | 换渠道获取，脚本不会重试成功 |
 | `需要 CARSI 登录` | 校方 IdP 会话过期 | 在该 Edge profile 里重新登录一次 |
-| `WARN ... kind=unknown` | 候选池缺 `publisher` / `host` | 先跑 `enrich_meta.mjs`，仍缺则手工指定通道 |
+| `WARN ... kind=unknown` | 出版社未被点名适配，走通用兜底 | 看该条最终结果；若 FAIL，先跑 `enrich_meta.mjs` 补 `publisher` / `host`，再 `-Retry` |
 | Wiley `CPE00002` | 请求频率过高 | 等待后重跑，脚本默认每篇间隔 10 秒 |
 | `FAIL 页数不足 / 关键词未命中` | 下到了错误的页（付费墙 HTML、打印页）或扫描版 PDF | 看 `_verify_report.json` 的 `hits` 与 `textless` |
 

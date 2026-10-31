@@ -228,7 +228,7 @@ python "$S\md2docx.py" <输出目录>\_analysis.md
 
 需人工介入的两种情况：
 
-- `dispatch` 打印 `WARN ... kind=unknown`：候选池缺 `publisher` / `host`，需人工指定通道
+- `dispatch` 打印 `WARN ... kind=unknown`：出版社未被点名适配，已转通用兜底；该条最终 FAIL 时再跑 `enrich_meta.mjs` 补 `publisher` / `host` 后 `-Retry`
 - `_failed.json` 非空：修复后 `-Retry` 只重跑失败条目；再加 `-Reuse` 可跳过 normalize / enrich，不再打 Crossref
 
 ## 阶段五：校验与归档
@@ -254,4 +254,4 @@ python "$S\verify_pdf.py" <输出目录> --meta <输出目录>\meta.json
 - `IF≈` 不得写成「影响因子」，必须注明来源是 OpenAlex 近两年篇均被引
 - 每阶段结束都要向用户简报结果，尤其是 FAIL 与 WARN
 - 下载阶段遵守 `download.md` 的硬约束（同一条 Shell 命令、单篇间隔）
-- 候选池若缺 `publisher` / `host`，**先跑 `enrich_meta.mjs` 补齐**，不要凭 DOI 前缀猜；补齐失败的那几条会落 `unknown`，需人工指定通道
+- 候选池若缺 `publisher` / `host`，**先跑 `enrich_meta.mjs` 补齐**，不要凭 DOI 前缀猜；补齐失败的几条会落 `unknown`，此时走通用兜底（读 `citation_pdf_url`），取不到才记 `_failed.json`
