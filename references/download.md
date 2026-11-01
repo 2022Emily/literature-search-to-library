@@ -304,10 +304,12 @@ python scripts/verify_pdf.py <目录> [--meta meta.json]
 
 ```powershell
 .\scripts\run_batch.ps1 -Out <输出目录> -Items <清单> -Kb <IMA知识库ID>          # 或先设 $env:IMA_KB_ID
-node scripts\upload_ima.mjs <输出目录> --kb <知识库ID> --dry                    # 只看清单，不联网
-node scripts\upload_ima.mjs <输出目录> --kb <知识库ID> [--folder <文件夹ID>] [--limit N]
+node scripts\upload_ima.mjs <输出目录> --kb <知识库ID> --dry                    # 只看清单（带 #编号），不联网
+node scripts\upload_ima.mjs <输出目录> --kb <知识库ID> --pick 2,5,9             # 看过清单后只传这几篇
+node scripts\upload_ima.mjs <输出目录> --kb <知识库ID> [--folder <文件夹ID>] [--only <DOI或文件名片段>] [--limit N]
 ```
 
+- `--pick` 的编号就是 `--dry` 打出的 `#n`（按完整待上传清单编号，筛选后不变号）；`--only` 按 DOI 或文件名子串过滤，可与 `--pick` 叠加
 - 只上传「台账命中 + `verified` 非空」的条目；未校验、sha256 变了、文件缺失的一律跳过并打印原因
 - 上传是**复制**：本地 PDF 永远保留（台账、重跑与去重都依赖它），不要指望用它「省本地空间」
 - 依赖本机已装的 `ima-skill`（从 `~/.trae-cn/skills/ima-skill` 或 `~/.workbuddy/skills/ima-skill` 读取其 `ima_api.cjs` / `preflight-check.cjs` / `cos-upload.cjs`），凭证放在 `~/.config/ima/client_id` + `api_key`（或用 `IMA_OPENAPI_CLIENTID` / `IMA_OPENAPI_APIKEY`）

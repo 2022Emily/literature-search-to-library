@@ -181,10 +181,12 @@ python .trae\skills\literature-search-to-library\scripts\md2docx.py _stage\<主�
 ```powershell
 & .trae\skills\literature-search-to-library\scripts\run_batch.ps1 -Out D:\lib\my-topic -Items dois.txt -Kb <知识库ID>
 # 等价：$env:IMA_KB_ID = "<知识库ID>" 后再跑，或单跑
-node .trae\skills\literature-search-to-library\scripts\upload_ima.mjs D:\lib\my-topic --kb <知识库ID> --dry    # 只看清单，不联网
-node .trae\skills\literature-search-to-library\scripts\upload_ima.mjs D:\lib\my-topic --kb <知识库ID> [--folder <文件夹ID>] [--limit N]
+node .trae\skills\literature-search-to-library\scripts\upload_ima.mjs D:\lib\my-topic --kb <知识库ID> --dry    # 只看清单（带 #编号），不联网
+node .trae\skills\literature-search-to-library\scripts\upload_ima.mjs D:\lib\my-topic --kb <知识库ID> --pick 2,5,9   # 看过清单后只传这几篇
+node .trae\skills\literature-search-to-library\scripts\upload_ima.mjs D:\lib\my-topic --kb <知识库ID> [--folder <文件夹ID>] [--only <DOI或文件名片段>] [--limit N]
 ```
 
+- `--pick` 的编号就是 `--dry` 打出的 `#n`（按完整待上传清单编号，加了筛选也不会变号）；`--only` 按 DOI 或文件名子串过滤，两者可叠加。
 - **上传是复制，不是搬家**：本地 PDF 永远保留（台账、重跑与去重都依赖它）。
 - 只上传「台账命中 + 已通过校验（`verified` 非空）」的条目；未校验、sha256 变了、文件缺失的一律跳过并打印原因。
 - 需要本机已装 `ima-skill`（从 `~/.trae-cn/skills/ima-skill` 或 `~/.workbuddy/skills/ima-skill` 读取其 `ima_api.cjs` / `preflight-check.cjs` / `cos-upload.cjs`），凭证放在 `~/.config/ima/client_id` + `api_key`，或设 `IMA_OPENAPI_CLIENTID` / `IMA_OPENAPI_APIKEY`。

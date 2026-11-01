@@ -1,7 +1,9 @@
 // 可选：把已校验的 PDF 同步到 IMA 知识库（默认关闭，不传 kb_id 就什么都不做）。
-// 用法：node upload_ima.mjs <输出目录> [--kb <知识库ID>] [--folder <文件夹ID>] [--dry] [--limit N]
+// 用法：node upload_ima.mjs <输出目录> [--kb <知识库ID>] [--folder <文件夹ID>] [--dry] [--limit N] [--pick N,M] [--only DOI|文件名]
 //   --kb      也可用环境变量 IMA_KB_ID；缺省即跳过（不改退出码）
 //   --dry     只打印「将上传 / 已跳过」清单，不联网、不需要凭证
+//   --pick    只传指定编号（编号就是 --dry 列出的 #n，逗号分隔，如 --pick 2,5,9）
+//   --only    按 DOI 或文件名子串过滤，逗号分隔（可只给片段）
 // 依赖已安装的 ima-skill（其 ima_api.cjs / preflight-check.cjs / cos-upload.cjs）。
 // 本地 PDF 一律保留：台账、sha256 校验与重跑都依赖它。
 import fs from 'node:fs';
@@ -13,7 +15,7 @@ import { loadIndex, alreadyDone } from './lib_index.mjs';
 const args = process.argv.slice(2);
 const OUT = args[0];
 if (!OUT || OUT.startsWith('--')) {
-  console.log('用法：node upload_ima.mjs <输出目录> [--kb <知识库ID>] [--folder <文件夹ID>] [--dry] [--limit N]');
+  console.log('用法：node upload_ima.mjs <输出目录> [--kb <知识库ID>] [--folder <文件夹ID>] [--dry] [--limit N] [--pick N,M] [--only DOI|文件名]');
   process.exit(2);
 }
 const opt = (name, def = '') => {
@@ -24,6 +26,9 @@ const KB = opt('kb', process.env.IMA_KB_ID || '');
 const FOLDER = opt('folder', '');
 const DRY = args.includes('--dry');
 const LIMIT = Number(opt('limit', '0')) || 0;
+const list = (name) => opt(name, '').split(',').map((s) => s.trim()).filter(Boolean);
+const PICK = new Set(list('pick').map(Number).filter((n) => Number.isInteger(n) && n > 0));
+const ONLY = list('only').map((s) => s.toLowerCase());
 
 // ---------- 前置：ima-skill 与凭证 ----------
 function findSkillDir() {
@@ -52,7 +57,7 @@ try {
 } catch { ledger = {}; }
 
 const idx = loadIndex(OUT);
-const todo = [];
+const all = [];
 const skipped = [];
 for (const doi of Object.keys(idx)) {
   const done = alreadyDone(OUT, doi);
@@ -60,13 +65,30 @@ for (const doi of Object.keys(idx)) {
   if (!done.verified) { skipped.push({ doi, why: '未通过 verify' }); continue; }
   const prev = ledger[doi];
   if (prev && prev.kb === KB && prev.sha256 === done.sha256) { skipped.push({ doi, why: '已上传过' }); continue; }
-  todo.push({ doi, file: done.file, sha256: done.sha256, bytes: done.bytes || 0 });
+  all.push({ doi, file: done.file, sha256: done.sha256, bytes: done.bytes || 0 });
+}
+// 编号固定为完整清单里的位置，--dry 看过之后可以直接 --pick 指定
+all.forEach((x, i) => { x.n = i + 1; });
+
+let todo = all;
+if (ONLY.length) {
+  todo = todo.filter((x) => {
+    const doi = x.doi.toLowerCase();
+    const file = x.file.toLowerCase();
+    return ONLY.some((v) => doi.includes(v) || file.includes(v));
+  });
+}
+if (PICK.size) {
+  const missing = [...PICK].filter((n) => !all.some((x) => x.n === n));
+  if (missing.length) console.log(`WARN 编号 ${missing.join(',')} 不在待上传清单里（不存在或已跳过），已忽略`);
+  todo = todo.filter((x) => PICK.has(x.n));
 }
 if (LIMIT > 0) todo.length = Math.min(todo.length, LIMIT);
 
-console.log(`待上传 ${todo.length} 篇，跳过 ${skipped.length} 篇${DRY ? '（dry run）' : ''}`);
+const filtered = ONLY.length || PICK.size ? '（已按 --only/--pick 筛选）' : '';
+console.log(`待上传 ${todo.length} 篇，跳过 ${skipped.length} 篇${filtered}${DRY ? '（dry run）' : ''}`);
 for (const x of skipped) console.log(`SKIP ${x.doi}  ${x.why}`);
-for (const x of todo) console.log(`  →  ${x.file}  ${(x.bytes / 1048576).toFixed(1)}MB  ${x.doi}`);
+for (const x of todo) console.log(`  #${x.n}  →  ${x.file}  ${(x.bytes / 1048576).toFixed(1)}MB  ${x.doi}`);
 
 if (!KB) {
   console.log('未指定 --kb / IMA_KB_ID，跳过上传');
