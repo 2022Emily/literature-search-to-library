@@ -1,6 +1,6 @@
 ---
 name: literature-search-to-library
-description: 学术文献从关键词检索到 PDF 入库的完整流程：OpenAlex 检索与排序、元数据补全、分析报告（含人工检查点）、按出版社通道下载 PDF 并三重校验；也支持只给 DOI 直接入库。Use when the user asks to search a topic by keywords and build a local PDF library, or to download full-text PDFs (Elsevier, AAAS, ACS, Wiley, Springer/Nature, RSC, MDPI) from DOIs.
+description: 学术文献从关键词检索到 PDF 入库的完整流程：OpenAlex 检索与排序、元数据补全、分析报告（含人工检查点）、按出版社通道下载 PDF 并三重校验；也支持只给 DOI 直接入库。Use when the user asks to search a topic by keywords and build a local PDF library, or to download full-text PDFs (Elsevier, AAAS, ACS, Wiley, Springer/Nature, RSC, MDPI, IEEE) from DOIs.
 metadata:
   version: "2.0.1"
   status: active
@@ -57,7 +57,7 @@ Glob: **/scripts/search_multi.mjs   →  $S 取其所在目录
 - 报告正文不得出现「速读卡 / 噪声 / 池子 / 候选池分析 / 子体系全景」
 - 报告同时交 Word 与 Markdown 两份，简报里两个链接都要给；链接一律写成 `file:///` + 绝对路径（正斜杠、带盘符，如 `file:///e:/项目/dist/_analysis.docx`），不要用 `computer://`，也不要写省略盘符的相对路径
 - 每条评述必须写局限；结尾必须回答「若只选 5 篇」
-- 下载硬约束：**启动 Edge → 等端口 → 跑脚本必须在同一条 Shell 命令里**；Wiley 单篇间隔 ≥10 秒，Elsevier / AAAS / ACS / Springer / RSC / MDPI ≥4 秒
+- 下载硬约束：**启动 Edge → 等端口 → 跑脚本必须在同一条 Shell 命令里**；Wiley 单篇间隔 ≥10 秒，Elsevier / AAAS / ACS / Springer / RSC / MDPI / IEEE ≥4 秒
 - 遇 Cloudflare / 验证码只提示并轮询等待，不自动破解；只处理有机构授权的文献
 - 缺 `node` / Python / PyMuPDF / Edge 时先报原因并终止，不要空跑
 

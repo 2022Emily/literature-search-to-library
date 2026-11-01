@@ -105,11 +105,11 @@ node scripts/enrich_meta.mjs <候选池.json> <候选池_enriched.json> [--meta 
 node scripts/dispatch.mjs 9223 <输出目录> [--dry] [--retry-failed]
 ```
 
-- 按 `kind` 分组：`elsevier`→`sd_pull`、`aaas`→`aaas_pull`、`acs`→`generic_pull`、`wiley`→`wiley_cookie`、`springer`→`springer_pull`、`rsc`→`rsc_pull`、`mdpi`→`mdpi_pull`
-- 执行顺序 elsevier → aaas → acs → wiley → springer → rsc → mdpi，避免 Elsevier 的 assets 页被顶掉
+- 按 `kind` 分组：`elsevier`→`sd_pull`、`aaas`→`aaas_pull`、`acs`→`generic_pull`、`wiley`→`wiley_cookie`、`springer`→`springer_pull`、`rsc`→`rsc_pull`、`mdpi`→`mdpi_pull`、`ieee`→`ieee_pull`
+- 执行顺序 elsevier → aaas → acs → wiley → springer → rsc → mdpi → ieee，避免 Elsevier 的 assets 页被顶掉
 - `--dry` 只打印分派结果，不实际下载，建议先跑一次
 - `--retry-failed` 改读 `<输出目录>/_failed.json`，只重跑上次失败的条目（会自动从 `_items_enriched.json` 补回 host / pii）
-- `kind` 为 `unknown` 时不再跳过：交给 `generic_pull.mjs` 的**通用兜底**，读文章页 `meta[name="citation_pdf_url"]`，同源 fetch 取字节（2.4 MB / 17 页的 Nature Communications 实测通过）。取不到才记进 `_failed.json`，不再需要人工指定通道
+- `kind` 为 `unknown` 时不再跳过：交给 `generic_pull.mjs` 的**通用兜底**，按三级入口取字节——① 文章页 `meta[name="citation_pdf_url"]`；② 页内 PDF 链接（排除 `downloadTable` / `downloadRef` / `downloadSupplement` 这类非正文链接）；③ 页面数据里的 `.pdf` 路径（SAGE 中国区代理站只发这个，留在文章页直接取，不导航）。三级都取不到才记进 `_failed.json`
 - 有通道失败时退出码为 1，失败条目统一落 `_failed.json`（`{doi, kind, script, file, reason, attempts, first, last}`），成功则自动清除该条
 
 ## 失败清单与断点续跑
@@ -152,8 +152,9 @@ node scripts/<脚本> 9223 <输出目录> <items.json>
 | Springer / Nature | 机构 IP（`link.springer.com` 实测付费墙文献可直接取） | `link.springer.com/article/{DOI}` 或 `www.nature.com/articles/{slug}` | 见下方专用流程，脚本 `scripts/springer_pull.mjs` |
 | MDPI | 全 OA | 路径为 `/{issn}/{vol}/{issue}/{article}`，无法由 DOI 拼出 | 见下方专用流程，脚本 `scripts/mdpi_pull.mjs` |
 | RSC / pubs.rsc.org | 机构 IP（页面显示所属机构名） | 文章页 `meta[name="citation_pdf_url"]` | 见下方专用流程，脚本 `scripts/rsc_pull.mjs` |
+| IEEE / ieeexplore.ieee.org | 机构 IP | `/stampPDF/getPDF.jsp?tp=&arnumber=<n>`（`arnumber` 从 `/document/<n>` 还原，`stamp.jsp` 是 iframe 外壳不可用） | 见下方专用流程，脚本 `scripts/ieee_pull.mjs` |
 | 纯 OA / bronze | 无需授权 | OpenAlex `pdf_url`（可选 Unpaywall） | Node 直链，成功率≈100%，由 `oa_route.mjs` 自动处理，优先走 |
-| 其他（未点名适配：IEEE、AIP、IOP、T&F、SAGE、CUP/OUP、PNAS…） | 视出版社而定 | 文章页 `meta[name="citation_pdf_url"]` | `generic_pull.mjs` 通用兜底：同源 fetch，非 `%PDF-` 即记失败 |
+| 其他（未点名适配：AIP、IOP、T&F、SAGE、CUP/OUP、PNAS…） | 视出版社而定（本机构是否订阅） | `citation_pdf_url` → 页内 PDF 链接 → 页面数据里的 `.pdf` 路径 | `generic_pull.mjs` 通用兜底：同源 fetch，非 `%PDF-` 即记失败。实测 AIP / IOP / CUP / OUP / T&F / SAGE 六家各 1 篇均取到正文 |
 
 ## AAAS 专用流程
 
@@ -225,6 +226,15 @@ RSC 是最挑取字节方式的一家，两条常见路线都不可行：
 - **签名直链有时效**，必须在导航后立刻使用，不能存下来隔天复用。
 - 判据是「URL 被退回 `/article-abstract?...redirectedFrom=PDF`」即无全文权限，直接报错，不要重试。实测 *Sustainable Energy & Fuels* 2021 的一篇被退回，而 *J. Mater. Chem. A* 同一次跑通，说明是期刊级订阅差异，不是脚本问题。
 - 页面文本出现所属机构名说明机构 IP 已被识别，可以作为授权已生效的旁证。
+
+## IEEE 专用流程
+
+实现见 `scripts/ieee_pull.mjs`，实测 IEEE Access 一篇 PASS（7.4 MB / 11 页，arnumber=11271199）。
+
+- DOI 只落地到 `ieeexplore.ieee.org/document/{arnumber}`，PDF 地址**拼不出来**；先取 `arnumber`（页面路径 `/document/<n>`，或 `citation_pdf_url` 里的 `arnumber=`）
+- 文章页的 `citation_pdf_url` 常指向 `stamp.jsp`，那是 iframe 外壳，取回是 HTML；正文在 `/stampPDF/getPDF.jsp?tp=&arnumber=<n>&ref=`
+- 在文章页内同源 fetch 该地址，最多重试 6 次；`stamp.jsp` 只在 `/stampPDF/` 连续失败时作为备选
+- 机构未订阅时该地址返回 HTML 或跳登录页，按「取回非 PDF」记失败，脚本不尝试任何登录流程
 
 ## Wiley 专用流程（顺序不可调换）
 
@@ -331,5 +341,5 @@ node scripts\upload_ima.mjs <输出目录> --kb <知识库ID> [--folder <文件�
 - RSC 的订阅是**按刊**的：本机构对 *J. Mater. Chem. A*、*Mater. Adv.*、*RSC Adv.* 有权限，但 *Sustainable Energy & Fuels* 实测被退回文章页。同一批清单里出现 RSC 的 FAIL 时，先怀疑该刊未订阅，再查脚本。
 - MDPI 虽是全 OA，`oa_route` 偶尔能直取（OpenAlex 的 `pdf_url` 指向 `mdpi-res.com` CDN 时），多数情况指向 `www.mdpi.com/.../pdf` 会被 Cloudflare 拦而落到 pending。因此 MDPI 走浏览器通道属正常，不必当成路由失败。
 - ACS 的 PDF **不是字节稳定的**：同一篇文章两次下载长度相同（12,514,031 字节）但 SHA256 不同。因此去重以 `_index.json` 的 DOI 为准，SHA256 只用来发现同目录内的内容重复。
-- 仍无专用通道的出版社：IEEE、AIP、IOP、Taylor & Francis、SAGE、Cambridge / Oxford、PNAS。`dispatch.mjs` 会因 `kind` 缺失打 WARN，需手工指定入口。
+- 仍无专用通道的出版社：AIP、IOP、Taylor & Francis、SAGE、Cambridge / Oxford、PNAS。这些会落 `unknown` 走通用兜底（实测六家各 1 篇均通过）；兜底仍失败时先补 `publisher` / `host` 再 `-Retry`，不要按 DOI 前缀手工指定通道。
 - 附属材料（SI）尚未覆盖：RSC 的 `article-supplement`、Wiley / Elsevier 的 supplementary 链接都还没接。

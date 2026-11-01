@@ -18,6 +18,16 @@ async function pull(sessionId, dst, urlExpr = 'location.href') {
   return savePdf(buf, dst);
 }
 
+// 页面还在渲染 / 跳转时取字节常常落空，按固定间隔重试几次
+async function pullRetry(sessionId, dst, tries = 4, gap = 3000, urlExpr = 'location.href') {
+  let last;
+  for (let i = 0; i < tries; i++) {
+    await sleep(gap);
+    try { return await pull(sessionId, dst, urlExpr); } catch (e) { last = e; }
+  }
+  throw last;
+}
+
 for (const it of ITEMS) {
   const dst = path.join(OUT, it.file);
   if (preSkip(OUT, it)) continue;
@@ -49,9 +59,11 @@ for (const it of ITEMS) {
       continue;
     }
 
-    // 找 PDF 入口：优先页面上的下载链接，其次 meta[name="citation_pdf_url"]
-    // （后者是未点名适配的出版社最可靠的入口，见 dispatch.mjs 的 unknown 兜底）
+    // 找 PDF 入口：meta[name="citation_pdf_url"] 最可靠（未点名适配的出版社基本都发这个），
+    // 其次才是页面上的下载链接；downloadTable / downloadRef / downloadSupplement 不是正文。
+    // 有的站点两者都没有，只在页面数据里给 PDF 路径（SAGE 中国区代理站就是）
     let href = null;
+    let src = '';
     let pageUrl = null;
     let verifySecs = 0;
     for (let i = 0; i < 40; i++) {
@@ -60,18 +72,25 @@ for (const it of ITEMS) {
         const txt=document.body?document.body.innerText:'';
         const ts=/Verify you are human|确认您是真人|Checking your browser/i.test(txt);
         const pats=['a[href*="/pdfft?"]','a[href*="/doi/pdf/"]','a[href$=".pdf"]','a[href*="/pdf"]','a[href*="download"]'];
+        const bad=/download(Table|Ref|Supplement|Citat)/i;
         let pick=null;
-        for(const p of pats){const els=[...document.querySelectorAll(p)].filter(a=>!a.closest('nav,footer'));
+        for(const p of pats){const els=[...document.querySelectorAll(p)].filter(a=>!a.closest('nav,footer')&&!bad.test(a.getAttribute('href')||''));
           const cur=els.find(a=>/accessbar-utility|pdf-link|article-pdfLink/.test(a.className))||els[0]; if(cur){pick=cur;break}}
         const meta=document.querySelector('meta[name="citation_pdf_url"]');
+        const html=document.documentElement.outerHTML;
+        let dataPdf=null;
+        {const arr=[];let i=html.indexOf('.pdf');
+         while(i>-1&&arr.length<6){let s=i;while(s>0&&/[\\w\\-\\.\\/]/.test(html[s-1]))s--;arr.push(html.slice(s,i+4));i=html.indexOf('.pdf',i+5)}
+         dataPdf=arr.map(x=>x.replace(/\\\\/g,'')).find(x=>x.startsWith('/')&&x.length>=8)||null}
         return JSON.stringify({url:location.href,ts,href:pick?pick.getAttribute('href'):null,
-          meta:meta?meta.content:null,
+          meta:meta?meta.content:null,dataPdf,
           alt:location.pathname.match(/^\\/\\d+\\.\\d+\\//)?location.origin+location.pathname+'/pdf':null});
       })()`).catch(() => null);
       if (!raw) continue;
       const st = JSON.parse(raw);
       if (st.ts) { verifySecs += 2; if (i % 10 === 0) console.log(`⏸  ${it.doi} 需要人工验证…`); continue; }
-      href = st.href || st.meta || st.alt;
+      href = st.meta || st.href || st.dataPdf || st.alt;
+      src = st.meta ? 'meta' : st.href ? 'link' : st.dataPdf ? 'data' : 'alt';
       if (href) { pageUrl = st.url; break; }
     }
     if (!href) {
@@ -80,6 +99,15 @@ for (const it of ITEMS) {
     }
     const full = href.startsWith('http') ? href : absUrl(it, href, pageUrl);
     console.log(`→ ${it.doi} 入口 ${full.slice(0, 100)}`);
+
+    // 页面数据里的路径一般带 attachment 头，导航过去只会触发下载，留在文章页直接取
+    if (src === 'data') {
+      const r = await pullRetry(sessionId, dst, 6, 3000, JSON.stringify(full));
+      markDone(OUT, it, dst, { pages: r.pages });
+      console.log(`OK   ${it.doi}  ${(r.size / 1048576).toFixed(1)}MB  pages≈${r.pages}`);
+      clearFailure(OUT, it.doi);
+      continue;
+    }
 
     await cdp.send('Page.navigate', { url: full }, sessionId);
 

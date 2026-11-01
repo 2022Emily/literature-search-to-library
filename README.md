@@ -1,6 +1,6 @@
 # 学术文献检索与全文入库（Literature Search → Full-Text Library）
 
-一个 skill 覆盖两条路径：`literature-search-to-library` 从关键词出发，检索 → 分析报告 → 人工选片 → 下载；也可以直接给 DOI，跳过检索与报告。下载端覆盖 Elsevier / ScienceDirect、AAAS / Science.org、ACS、Wiley、Springer / Nature、RSC、MDPI 七家出版社，并带跨批次去重、失败清单与三重校验。
+一个 skill 覆盖两条路径：`literature-search-to-library` 从关键词出发，检索 → 分析报告 → 人工选片 → 下载；也可以直接给 DOI，跳过检索与报告。下载端覆盖 Elsevier / ScienceDirect、AAAS / Science.org、ACS、Wiley、Springer / Nature、RSC、MDPI、IEEE 八家出版社，并带跨批次去重、失败清单与三重校验。
 
 下载端解决的不是「怎么找到论文」，而是「已经在机构网络里、却拿不到 PDF」这段路：付费墙文章在浏览器里能看到全文，但 Node 直连会被 403、CORS 或 Cloudflare 挡住。脚本把浏览器当作授权会话的载体，只在浏览器内建立会话，再把字节取回来。
 
@@ -12,7 +12,7 @@
 
 | 维度 | 只取 OA 的工具 | 本 skill |
 |---|---|---|
-| 全文范围 | OA / bronze | 另加 Elsevier、AAAS、ACS、Wiley、Springer·Nature、RSC 六家付费墙（MDPI 全 OA，但要过 Cloudflare） |
+| 全文范围 | OA / bronze | 另加 Elsevier、AAAS、ACS、Wiley、Springer·Nature、RSC、IEEE 七家付费墙（MDPI 全 OA，但要过 Cloudflare） |
 | 如何授权 | 无需 | 机构 IP（多数）、CARSI 校方 IdP（Wiley）、浏览器会话复用 |
 | 结果是否可信 | 看文件大小 | `%PDF-` 头 + 页数 + 首页关键词 + SHA256，另有跨批次 DOI 去重 |
 | 半途失败怎么办 | 从头再跑 | `_failed.json` 只记失败条目，`-Retry` 补跑，台账 `_index.json` 防重下 |
@@ -47,11 +47,12 @@
 | Wiley | `wiley_cookie.mjs` | CARSI（校方 IdP） |
 | Springer / Nature | `springer_pull.mjs` | 机构 IP |
 | RSC | `rsc_pull.mjs` | 机构 IP |
+| IEEE | `ieee_pull.mjs` | 机构 IP |
 | MDPI | `mdpi_pull.mjs` | 全 OA，但需浏览器过 Cloudflare |
 
 输入是**已有的 DOI 或文章页 URL 清单**。要从关键词开始找文献，走同一个技能的检索路径（见 [关键词 → PDF](#关键词--pdf-闭环)）。
 
-未点名适配的出版社（IEEE、AIP、IOP、Taylor & Francis、SAGE、Cambridge / Oxford、PNAS 等）会落 `kind=unknown`，由 `generic_pull.mjs` 的**通用兜底**读文章页的 `citation_pdf_url` 试取一次；取不到才记进 `_failed.json`。附属材料（SI）未覆盖。
+未点名适配的出版社（AIP、IOP、Taylor & Francis、SAGE、Cambridge / Oxford、PNAS 等）会落 `kind=unknown`，由 `generic_pull.mjs` 的**通用兜底**读文章页的 `citation_pdf_url`、页内 PDF 链接或页面数据里的 PDF 路径试取；AIP / IOP / Cambridge / Oxford / Taylor & Francis / SAGE 六家各 1 篇实测取到正文，取不到才记进 `_failed.json`。附属材料（SI）未覆盖。
 
 ## 环境要求
 
@@ -72,8 +73,8 @@ literature-search-to-library/
 ├── LICENSE
 ├── references/
 │   ├── search.md         # 检索 → 报告 → 检查点 → 简报（关键词路径）
-│   └── download.md       # 七家出版社通道 + 硬约束（下载路径）
-└── scripts/              # 21 个脚本，检索与下载共用（md2docx.py 负责导出 Word 报告）
+│   └── download.md       # 八家出版社通道 + 硬约束（下载路径）
+└── scripts/              # 22 个脚本，检索与下载共用（md2docx.py 负责导出 Word 报告）
 ```
 
 两种装法，任选其一：

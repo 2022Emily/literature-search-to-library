@@ -23,6 +23,7 @@ const HOST_RULES = [
   [/mdpi\.com$/, 'mdpi'],
   [/nature\.com$|link\.springer\.com$/, 'springer'],
   [/rsc\.org$/, 'rsc'],
+  [/ieeexplore\.ieee\.org$/, 'ieee'],
 ];
 const PUB_RULES = [
   [/american chemical society/i, 'acs'],
@@ -32,6 +33,7 @@ const PUB_RULES = [
   [/mdpi/i, 'mdpi'],
   [/springer|nature portfolio/i, 'springer'],
   [/royal society of chemistry/i, 'rsc'],
+  [/institute of electrical|^ieee$/i, 'ieee'],
 ];
 const pick = (v, rules) => (rules.find(([re]) => re.test(v)) || [null, null])[1];
 const detect = (it) => pick(it.host || '', HOST_RULES) || pick(it.publisher || '', PUB_RULES) || 'unknown';
