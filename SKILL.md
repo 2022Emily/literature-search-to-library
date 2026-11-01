@@ -59,8 +59,8 @@ Glob: **/scripts/search_multi.mjs   →  $S 取其所在目录
 - 每条评述必须写局限；结尾必须回答「若只选 5 篇」
 - 下载硬约束：**启动 Edge → 等端口 → 跑脚本必须在同一条 Shell 命令里**；Wiley 单篇间隔 ≥10 秒，Elsevier / AAAS / ACS / Springer / RSC / MDPI / IEEE ≥4 秒
 - 遇 Cloudflare / 验证码只提示并轮询等待，不自动破解；只处理有机构授权的文献
-- 缺 `node` / Python / PyMuPDF / Edge 时先报原因并终止，不要空跑
+- 缺依赖时先补齐再跑，不要空跑：缺 PyMuPDF 由 `run_batch.ps1` 自动 `python -m pip install pymupdf`（`-NoAutoInstall` 可关）；缺 Node / Python 会打印 `winget install ...` 并以退出码 2 终止，此时征得用户同意后可执行该命令，再提示重开终端重跑；缺浏览器先问用户 Edge 装在哪，用 `-EdgePath`（或 `EDGE_PATH`）指定
 
 ## 环境
 
-Node ≥ 22（全局 `fetch` 与 `WebSocket`）、Python 3.9+ 与 PyMuPDF、Microsoft Edge、机构网络（校园网 / VPN / CARSI）。导出 Word 另需 `python-docx`（`pip install python-docx`，缺失时只跳过 docx）。写非白名单磁盘与启动浏览器需要 `dangerouslyDisableSandbox`。
+Node ≥ 22（全局 `fetch` 与 `WebSocket`）、Python 3.9+ 与 PyMuPDF（缺 PyMuPDF 时脚本自动 pip 安装）、Microsoft Edge 或 Chrome（脚本自动探测，`-EdgePath` 可指定）、机构网络（校园网 / VPN / CARSI）。导出 Word 另需 `python-docx`（`pip install python-docx`，缺失时只跳过 docx）。写非白名单磁盘与启动浏览器需要 `dangerouslyDisableSandbox`。

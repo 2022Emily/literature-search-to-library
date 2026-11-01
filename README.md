@@ -57,9 +57,9 @@
 ## 环境要求
 
 - **Windows 10/11**（编排脚本 `run_batch.ps1` 是 PowerShell，Windows 自带的 5.1 与 PowerShell 7 都能跑；单个 node 脚本本身跨平台，但没有提供 macOS / Linux 的启动封装）
-- **Microsoft Edge**（默认查找 `Program Files (x86)` 与 `Program Files` 两处；两处都没有时前置检查直接以退出码 2 终止，装在别处需手工改脚本里的路径）
+- **Microsoft Edge 或 Google Chrome / Chromium**（脚本按 `-EdgePath` / 环境变量 `EDGE_PATH` → 注册表 App Paths → `Program Files` / `LOCALAPPDATA` 常见目录 → `PATH` 的顺序自动查找，Edge 找不到会自动改用 Chrome；两者都没有才以退出码 2 终止。所有抓取脚本只走 CDP，浏览器品牌不影响下载）
 - **Node.js ≥ 22**（用到全局 `fetch` 与 `WebSocket`，后者要到 22 才稳定）
-- **Python 3.9+，且 `python` 在 PATH 中**（脚本用 `python` 调起，不认 `py` 启动器）；PyMuPDF 用 `pip install pymupdf`，导出 Word 报告另需 `pip install python-docx`（缺失时只跳过 docx，不影响检索与下载）
+- **Python 3.9+，且 `python` 在 PATH 中**（脚本用 `python` 调起，不认 `py` 启动器）；PyMuPDF 缺失时 `run_batch.ps1` 会自动 `python -m pip install pymupdf`（`-NoAutoInstall` 可关闭），导出 Word 报告另需 `python-docx`（缺失时只跳过 docx，不影响检索与下载）。缺 Node 或 Python 本身时不静默安装，只打印 `winget install ...` 并退出码 2
 - 可访问 `api.openalex.org`、`api.crossref.org`、`api.semanticscholar.org`、`api.unpaywall.org`（仅传 `-Email` 时用到）、`doi.org` 及各出版社域名
 
 ## 安装
@@ -94,7 +94,7 @@ literature-search-to-library/
 #    https://pubs.rsc.org/en/content/articlelanding/2024/...
 #    也可以直接给 JSON 数组 [{"doi": "...", "file": "..."}]
 
-# 2. 一键跑完整链路（自己启动 Edge、轮询端口、依次执行七个步骤）
+# 2. 一键跑完整链路（自己启动浏览器、轮询端口、依次执行七个步骤）
 & .trae\skills\literature-search-to-library\scripts\run_batch.ps1 -Out D:\lib\my-topic -Items D:\lib\dois.txt -Email you@example.com
 ```
 
@@ -109,8 +109,10 @@ literature-search-to-library/
 | `-Retry` | 只重跑 `_failed.json` 里的条目 |
 | `-NoEdge` | 不开浏览器，仅做归一化 / 元数据 / OA 直取 |
 | `-SkipVerify` | 跳过最后的 PDF 校验 |
+| `-NoAutoInstall` | 缺 PyMuPDF 时不自动 `pip install`，直接报错退出 |
 | `-Port` | 调试端口，默认 9223 |
-| `-Profile` | Edge 用户目录，默认当前目录下 `_edgeprofile` |
+| `-EdgePath` | 指定浏览器可执行文件（等效环境变量 `EDGE_PATH`）；不填则自动查找 Edge，再找 Chrome |
+| `-Profile` | 浏览器用户目录（Edge / Chrome 共用同一参数），默认当前目录下 `_edgeprofile` |
 | `-Kb` | 可选：校验后把 PDF 另存一份到 IMA 知识库（也可设环境变量 `IMA_KB_ID`），见 [可选：同步到 IMA 知识库](#可选同步到-ima-知识库默认关闭) |
 | `-SkipIma` | 即使配了 `-Kb` / `IMA_KB_ID` 也不上传 |
 
@@ -196,7 +198,7 @@ node .trae\skills\literature-search-to-library\scripts\upload_ima.mjs D:\lib\my-
 |---|---|
 | `0` | 全部完成（或全部命中台账） |
 | `1` | 跑完了，但有条目未取到 / 校验未通过（看 `_failed.json`、`_oa_report.json`、`_verify_report.json`） |
-| `2` | 前置环境缺失（缺 `node`、缺 Python/PyMuPDF、找不到 Edge），未进入流程；`-NoEdge` 只跳过 Edge 检查，`-Dry` 跳过 Edge 与 Python 检查 |
+| `2` | 前置环境缺失（缺 `node`、缺 Python、找不到 Edge 且找不到 Chrome、或加 `-NoAutoInstall` 时缺 PyMuPDF），未进入流程；`-NoEdge` 只跳过浏览器检查，`-Dry` 跳过浏览器与 Python 检查 |
 
 `-NoEdge` 模式下没有浏览器通道接手，`pending-browser` 计为最终失败，返回 1。
 

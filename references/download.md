@@ -21,7 +21,7 @@
 - `-Reuse` 复用上一次的 `_items_enriched.json`，跳过 normalize 与 enrich（不再打 Crossref / OpenAlex）；修完下载问题后重跑只需 `-Reuse -Retry`
 - `-Kb <知识库ID>` 校验通过后把 PDF **另外上传**一份到 IMA 知识库（本地文件保留，见「可选：同步到 IMA 知识库」）；等价环境变量 `IMA_KB_ID`；不传就完全跳过
 - `-SkipIma` 即使配了 `IMA_KB_ID` 或 `-Kb` 也不上传
-- 开跑前先做前置检查：缺 `node`、缺 `python`/PyMuPDF（`pip install pymupdf`）、缺 Edge 可执行文件时，直接报原因并以退出码 2 终止，不会跑到一半才炸
+- 开跑前先做前置检查：缺 `node` / `python` 时打印 `winget install ...` 并以退出码 2 终止；缺 PyMuPDF 时默认自动 `python -m pip install pymupdf` 并复检（`-NoAutoInstall` 关闭这一行为，改为直接报错）；找不到 Edge 也找不到 Chrome 同样退出码 2。浏览器按 `-EdgePath` / `EDGE_PATH` → 注册表 App Paths → 常见安装目录 → `PATH` 自动查找，装了 Chrome 也能直接用
 - 写非白名单盘需 `dangerouslyDisableSandbox: true`
 
 阶段依次为 `[1/7]` Edge、`[2/7]` normalize、`[3/7]` enrich、`[4/7]` oa_route、`[5/7]` dispatch、`[6/7]` verify、`[7/7]` 可选的 IMA 同步。
@@ -128,14 +128,18 @@ node scripts/dispatch.mjs 9223 <输出目录> --retry-failed
 
 - 写非白名单磁盘（如 `K:`）与启动浏览器，需 `dangerouslyDisableSandbox: true`。
 - **启动 Edge → 等端口 200 → 跑脚本必须在同一条 Shell 命令里**，否则 Edge 被回收，报 `ECONNREFUSED`。
-- Edge 必须独立 `--user-data-dir`，调试端口 9223。
+- 浏览器（Edge 或 Chrome）必须独立 `--user-data-dir`，调试端口 9223。
 - 单篇间隔：Springer / RSC / MDPI / ACS 为 4 秒，Wiley 建议 ≥10 秒（高频会返回 `CPE00002`）。
 - 遇 Cloudflare Turnstile 只打印提示并轮询等待，不自动破解。
 
-启动模板（`run_batch.ps1` 已内置这段，手工调单个脚本时才需要）：
+启动模板（`run_batch.ps1` 已内置完整探测，手工调单个脚本时才需要）：
 
 ```powershell
-$edge="C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"; if (!(Test-Path $edge)) { $edge="C:\Program Files\Microsoft\Edge\Application\msedge.exe" }
+# Edge 优先；注册表 App Paths 能覆盖自定义安装位置，最后用 Chrome 兜底
+$edge = (Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\msedge.exe' -ErrorAction SilentlyContinue).'(default)'
+if (-not $edge) { $edge = "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe" }
+if (-not (Test-Path $edge)) { $edge = "C:\Program Files\Microsoft\Edge\Application\msedge.exe" }
+if (-not (Test-Path $edge)) { $edge = "C:\Program Files\Google\Chrome\Application\chrome.exe" }
 Start-Process $edge -ArgumentList '--remote-debugging-port=9223','--user-data-dir=<profile>','--no-first-run','--no-default-browser-check','about:blank'
 for($i=0;$i -lt 40;$i++){ try { if((Invoke-WebRequest 'http://127.0.0.1:9223/json/version' -TimeoutSec 2 -UseBasicParsing).StatusCode -eq 200){ break } } catch {}; Start-Sleep -Milliseconds 500 }
 node scripts/<脚本> 9223 <输出目录> <items.json>

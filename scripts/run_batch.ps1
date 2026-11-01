@@ -9,12 +9,15 @@
 #   .\run_batch.ps1 -Out D:\lib\my-topic -Items items.json -Dry
 #   .\run_batch.ps1 -Out D:\lib\my-topic -Items items.json -Reuse -Retry
 #   .\run_batch.ps1 -Out D:\lib\my-topic -Items items.json -Kb <ima knowledge base id>
+#   .\run_batch.ps1 -Out D:\lib\my-topic -Items items.json -EdgePath "D:\tools\chrome.exe"
 param(
   [Parameter(Mandatory = $true)][string]$Out,
   [Parameter(Mandatory = $true)][string]$Items,
   [int]$Port = 9223,
   [string]$Profile = "",
   [string]$Email = "",
+  [string]$EdgePath = $env:EDGE_PATH,
+  [switch]$NoAutoInstall,
   [switch]$NoEdge,
   [switch]$Retry,
   [switch]$SkipVerify,
@@ -33,19 +36,35 @@ New-Item -ItemType Directory -Force -Path $Out | Out-Null
 # -Dry is a preview run: no Edge, no download, no verify.
 $useEdge = (-not $NoEdge) -and (-not $Dry)
 
-# Preflight: fail fast with a clear reason instead of dying halfway through.
+# Preflight: install what is safe to install, fail fast on the rest.
+# pip packages are installed in place; Node / Python would change the machine's
+# global state and need a fresh terminal for PATH, so those only get a command.
 if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
   Write-Host "preflight failed: node not found in PATH"
+  Write-Host "  fix: winget install OpenJS.NodeJS.LTS   (then reopen the terminal so PATH refreshes)"
   exit 2
 }
 if (-not $SkipVerify -and -not $Dry) {
+  if (-not (Get-Command python -ErrorAction SilentlyContinue)) {
+    Write-Host "preflight failed: python not found in PATH"
+    Write-Host "  fix: winget install Python.Python.3.12   (then reopen the terminal so PATH refreshes)"
+    exit 2
+  }
   $pyok = $false
   try {
     $null = & python -c "import fitz" 2>&1
     $pyok = ($LASTEXITCODE -eq 0)
   } catch { $pyok = $false }
+  if (-not $pyok -and -not $NoAutoInstall) {
+    Write-Host "[0/7] PyMuPDF missing, installing (python -m pip install pymupdf)"
+    & python -m pip install pymupdf
+    try {
+      $null = & python -c "import fitz" 2>&1
+      $pyok = ($LASTEXITCODE -eq 0)
+    } catch { $pyok = $false }
+  }
   if (-not $pyok) {
-    Write-Host "preflight failed: python or PyMuPDF missing (fix: pip install pymupdf)"
+    Write-Host "preflight failed: PyMuPDF missing (fix: python -m pip install pymupdf; drop -NoAutoInstall to install automatically)"
     exit 2
   }
 }
@@ -57,22 +76,69 @@ function Test-Port {
   } catch { return $false }
 }
 
-if ($useEdge -and -not (Test-Port)) {
-  $edge = "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
-  if (-not (Test-Path $edge)) { $edge = "C:\Program Files\Microsoft\Edge\Application\msedge.exe" }
-  if (-not (Test-Path $edge)) {
-    Write-Host "preflight failed: Edge not found (tried both Program Files paths)"
+# Locate a Chromium-family browser. All pull scripts only speak CDP, so Chrome /
+# Chromium works exactly like Edge; only the executable name differs.
+function Resolve-Browser {
+  if ($EdgePath) {
+    if (Test-Path $EdgePath) { return @{ Path = $EdgePath; Name = "browser (-EdgePath)" } }
+    Write-Host "preflight failed: -EdgePath / EDGE_PATH points to a missing file: $EdgePath"
     exit 2
   }
-  Write-Host "[1/7] starting Edge on port $Port (profile: $Profile)"
-  Start-Process $edge -ArgumentList "--remote-debugging-port=$Port", "--user-data-dir=$Profile", "--no-first-run", "--no-default-browser-check", "about:blank"
+
+  $cands = @()
+  # Registered "App Paths" entries survive custom install locations.
+  foreach ($exe in @("msedge.exe", "chrome.exe")) {
+    foreach ($root in @("HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths",
+                        "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\App Paths",
+                        "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths")) {
+      $k = Join-Path $root $exe
+      if (Test-Path $k) {
+        try {
+          $p = (Get-ItemProperty $k).'(default)'
+          if ($p) { $cands += $p.Trim('"') }
+        } catch {}
+      }
+    }
+  }
+  $cands += "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
+  $cands += "C:\Program Files\Microsoft\Edge\Application\msedge.exe"
+  $cands += "C:\Program Files\Google\Chrome\Application\chrome.exe"
+  $cands += "C:\Program Files (x86)\Google\Chrome\Application\chrome.exe"
+  if ($env:LOCALAPPDATA) {
+    $cands += Join-Path $env:LOCALAPPDATA "Microsoft\Edge\Application\msedge.exe"
+    $cands += Join-Path $env:LOCALAPPDATA "Google\Chrome\Application\chrome.exe"
+  }
+  foreach ($n in @("msedge.exe", "chrome.exe")) {
+    $c = Get-Command $n -ErrorAction SilentlyContinue
+    if ($c) { $cands += $c.Source }
+  }
+
+  foreach ($p in $cands) {
+    if ($p -and (Test-Path $p)) {
+      $name = if ($p -match "msedge") { "Edge" } else { "Chrome" }
+      return @{ Path = $p; Name = $name }
+    }
+  }
+  return $null
+}
+
+if ($useEdge -and -not (Test-Port)) {
+  $br = Resolve-Browser
+  if (-not $br) {
+    Write-Host "preflight failed: no Edge / Chrome found (checked App Paths, Program Files, LOCALAPPDATA, PATH)"
+    Write-Host "  fix: install Edge or Chrome, or pass -EdgePath <exe> (or set EDGE_PATH)"
+    exit 2
+  }
+  Write-Host "[1/7] starting $($br.Name) on port $Port (profile: $Profile)"
+  Write-Host "      $($br.Path)"
+  Start-Process $br.Path -ArgumentList "--remote-debugging-port=$Port", "--user-data-dir=$Profile", "--no-first-run", "--no-default-browser-check", "about:blank"
   for ($i = 0; $i -lt 40; $i++) {
     if (Test-Port) { break }
     Start-Sleep -Milliseconds 500
   }
 }
-if ($useEdge -and -not (Test-Port)) { throw "Edge debug port $Port not ready" }
-if (-not $useEdge) { Write-Host "[1/7] Edge skipped" }
+if ($useEdge -and -not (Test-Port)) { throw "browser debug port $Port not ready" }
+if (-not $useEdge) { Write-Host "[1/7] browser skipped" }
 
 $norm = Join-Path $Out "_items_norm.json"
 $enr = Join-Path $Out "_items_enriched.json"
